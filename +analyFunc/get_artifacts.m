@@ -6,7 +6,7 @@ p = inputParser;
 validData = @(x) isnumeric(x);
 addRequired(p,'rawSig',validData);
 addParameter(p,'plotIt',0,@(x) x==0 || x ==1);
-addParameter(p,'goodVec',[1:64],@isnumeric);
+addParameter(p,'goodCell',[1:64],@iscell);
 addParameter(p,'startInds',[],@iscell);
 addParameter(p,'endInds',[],@iscell);
 addParameter(p,'normalize','firstSamp',@isstr);
@@ -17,50 +17,53 @@ rawSig = p.Results.rawSig;
 plotIt = p.Results.plotIt;
 startInds = p.Results.startInds;
 endInds = p.Results.endInds;
-goodVec = p.Results.goodVec;
+goodCell = p.Results.goodCell;
 normalize = p.Results.normalize;
 amntPreAverage = p.Results.amntPreAverage;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-lengthMaxVecTrial = zeros(size(rawSig,3),size(rawSig,2));
+nTrials = length(startInds); nChans = size(rawSig, 2);
 
-goodChansLogical = logical(zeros(size(rawSig,2),1));
-goodChansLogical(goodVec) = 1;
-rawSig(:,~goodChansLogical,:) = 0;
+lengthMaxVecTrial = zeros(nTrials, nChans);
+maxLocationTrials = nan(nTrials, nChans);
+maxTrials = nan(nTrials, nChans);
+templateCell = repmat({cell(1, nTrials)}, 1, nChans);
 
-for trial = 1:size(rawSig,3) % loop through trials
-    lengthMaxChan = zeros(1,size(rawSig,2));
+for trial = 1:nTrials % loop through trials
     
-    for chan = goodVec % loop through channels
-        % get single trial
-        rawSigTemp = rawSig(:,chan,trial);
+    lengthMaxChan = zeros(1, nChans);
+
+    for chan = goodCell{trial} % loop through good channels for this trial
         
-        avgSignal = {};
-        lengthMaxVecTemp = [];
+        locMax = zeros(1, length(startInds{trial}{chan}));
+        avgSignal = cell(1, length(startInds{trial}{chan}));
         for sts = 1:length(startInds{trial}{chan}) % loop through individual stimulation epochs
             win = startInds{trial}{chan}(sts):endInds{trial}{chan}(sts);
-            lengthMaxTemp = length(win);
+            locMax(sts) = length(win);
+            
+            rawSigTemp = rawSig(win, chan);
             
             switch normalize
                 case 'preAverage'
-                    avgSignal{sts} = rawSigTemp(win) - mean(rawSigTemp(startInds{trial}{chan}(sts):startInds{trial}{chan}(sts)+amntPreAverage));% take off average of first x samples
+                    avgSignal{sts} = rawSigTemp - mean(rawSigTemp(1:amntPreAverage));% take off average of first x samples
                 case 'none'
-                    avgSignal{sts} = rawSigTemp(win);
+                    avgSignal{sts} = rawSigTemp;
                 case 'firstSamp'
-                    avgSignal{sts} = rawSigTemp(win) - rawSigTemp(startInds{trial}{chan}(sts));
+                    avgSignal{sts} = rawSigTemp - rawSigTemp(1);
                 case 'mean'
-                    avgSignal{sts} = rawSigTemp(win) - mean(rawSigTemp(win));
+                    avgSignal{sts} = rawSigTemp - mean(rawSigTemp);
                     
             end
-            
-            lengthMaxVecTemp = [lengthMaxVecTemp lengthMaxTemp];
-            
+                        
         end
         
-        lengthMaxChan(chan) = max(lengthMaxVecTemp);
-        
+        lengthMaxChan(chan) = max(locMax);
         templateCell{chan}{trial} = avgSignal;
+        
+        [maxLoc, idxLoc] = cellfun(@max, avgSignal);
+        maxLocationTrials(trial, chan) = median(idxLoc);
+        maxTrials(trial, chan) = median(maxLoc);
         
         if plotIt && (trial == 10 || trial == 1000)
             figure
@@ -77,15 +80,10 @@ end
 % figure out the maximum amplitude artifact for each given channel and
 % trial
 
-maxAmps = squeeze(max(rawSig,[],1));
-
 % find maximum index for reducing dimensionality later
-[~,maxChan] = max(maxAmps,[],1);
-maxChan = maxChan(1);
-[~,maxTrial] = max(maxAmps,[],2);
-maxTrial = maxTrial(maxChan);
-[~,maxLocation] = cellfun(@max,(templateCell{maxChan}{maxTrial}));
-maxLocation = median(maxLocation);
+[maxAmps, idxMaxTrial] = nanmax(maxTrials); % maximum amplitude for each trial
+[~, maxChan] = max(maxAmps); % the channel with the maximal value in the artifact
+maxLocation = maxLocationTrials(idxMaxTrial(maxChan), maxChan); % the index of maxAmps in the maximal trial
 
 % get the maximum length of any given artifact window for each channel
 lengthMax = max(lengthMaxVecTrial,[],1);

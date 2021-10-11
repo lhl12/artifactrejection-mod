@@ -1,4 +1,4 @@
-function [template,templateArrayCell] = template_equalize_length(templateCell,rawSig,varargin)
+function [template,templateArrayCell, maxIdxArray] = template_equalize_length(templateCell,rawSig,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -7,47 +7,47 @@ p = inputParser;
 addRequired(p,'templateCell',@iscell);
 addRequired(p,'rawSig',@isnumeric);
 
-addParameter(p,'goodVec',[1:64],@isnumeric);
+addParameter(p,'goodCell', {}, @iscell);
 addParameter(p,'startInds',[],@iscell);
 addParameter(p,'lengthMax',25,@isnumeric);
 
 p.parse(templateCell,rawSig,varargin{:});
 templateCell = p.Results.templateCell;
 rawSig = p.Results.rawSig;
-goodVec = p.Results.goodVec;
 startInds = p.Results.startInds;
 lengthMax = p.Results.lengthMax;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+template = repmat({cell(1, length(startInds))}, 1, size(rawSig, 2));
+maxIdx = repmat({cell(1, length(startInds))}, 1, size(rawSig, 2));
 
-for chan = goodVec
-    templateArray = [];
-    templateArrayExtracted = [];
+for chan = 1:size(rawSig, 2)
+    
     lengthMaxChan = lengthMax(chan);
     
-    for trial = 1:size(rawSig,3)
-        artifactsCell = templateCell{chan}{trial};
-        artifactsMat = [];
-        for sts = 1:length(startInds{trial}{chan})
-            
-            artifactsTrial = artifactsCell{sts};
-            
-            if size(artifactsTrial,1) < lengthMaxChan
-                amntPad = lengthMaxChan - size(artifactsTrial,1);
-                artifacts_pad = padarray(artifactsTrial,amntPad,0,'post');
-            else
-                artifacts_pad = artifactsTrial;
+    for trial = 1:length(startInds)
+        artifactsMat = nan(lengthMaxChan, length(startInds{trial}{chan}));
+            for sts = 1:length(startInds{trial}{chan})
+                artifactsTrial = templateCell{chan}{trial}{sts};
+                if length(artifactsTrial) < lengthMaxChan
+                    amntPad = lengthMaxChan - length(artifactsTrial);
+                    artifactsMat(:, sts) = padarray(artifactsTrial, amntPad, 0, 'post');
+                else
+                    artifactsMat(:, sts) = artifactsTrial;
+                end
             end
-            
-            artifactsMat(:,sts) = artifacts_pad;
-            
-        end
         template{chan}{trial} = artifactsMat;
-        templateArray = [templateArray artifactsMat];
-        templateArrayCell{chan} = templateArray;
+        % find the index of the overall maximum
+        [~, maxIdx{chan}{trial}] = max(artifactsMat, [], 1);
+
     end
+    
 end
+
+
+templateArrayCell = cellfun(@(x) [x{:}], template, 'UniformOutput', false);
+maxIdxArray = cellfun(@(x) [x{:}], maxIdx, 'UniformOutput', false);
 
 fprintf(['-------Finished making artifacts the same length-------- \n'])
 

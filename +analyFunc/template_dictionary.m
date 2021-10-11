@@ -1,4 +1,4 @@
-function [processedSig,templateArrayCellOutput] = template_dictionary(templateArrayCell,templateTrial,rawSig,fs,varargin)
+function [processedSig,templateArrayCellOutput] = template_dictionary(templateArrayCell,rawSig,fs,varargin)
 % Usage:  [processedSig,templateArrayCellOutput] = template_dictionary(templateArrayCell,templateTrial,rawSig,varargin)
 %
 % This function implements the template dictionary method. Briefly, the
@@ -80,7 +80,6 @@ function [processedSig,templateArrayCellOutput] = template_dictionary(templateAr
 p = inputParser;
 
 addRequired(p,'templateArrayCell',@iscell);
-addRequired(p,'templateTrial',@iscell);
 addRequired(p,'rawSig',@isnumeric);
 addRequired(p,'fs',@isnumeric);
 
@@ -89,7 +88,7 @@ addParameter(p,'plotIt',0,@(x) x==0 || x ==1);
 addParameter(p,'distanceMetricDbscan','eucl',@isstr);
 addParameter(p,'distanceMetricSigMatch','eucl',@isstr);
 
-addParameter(p,'goodVec',[1:64],@isnumeric);
+addParameter(p,'goodCell', {}, @iscell);
 addParameter(p,'startInds',[],@iscell);
 addParameter(p,'endInds',[],@iscell);
 
@@ -112,17 +111,16 @@ addParameter(p,'outlierThresh',0.95,@isnumeric);
 addParameter(p,'useProcrustes',0,@(x) x==0 || x ==1);
 
 
-p.parse(templateArrayCell,templateTrial,rawSig,fs,varargin{:});
+p.parse(templateArrayCell,rawSig,fs,varargin{:});
 
 templateArrayCell = p.Results.templateArrayCell;
-templateTrial = p.Results.templateTrial;
 rawSig = p.Results.rawSig;
 fs =  p.Results.fs;
 
 plotIt = p.Results.plotIt;
 distanceMetricDbscan = p.Results.distanceMetricDbscan;
 distanceMetricSigMatch = p.Results.distanceMetricSigMatch;
-goodVec = p.Results.goodVec;
+goodCell = p.Results.goodCell;
 startInds = p.Results.startInds;
 endInds = p.Results.endInds;
 
@@ -151,18 +149,24 @@ templateArrayCellOutput = {};
 processedSig = zeros(size(rawSig));
 templateSubtractCell = {};
 templateListVec = {};
+maxLocAll = maxLocation;
 
 fprintf(['-------Dictionary-------- \n'])
 
 plotIt = 1;
 
-for chan = goodVec
+for chan = 1:size(rawSig, 2)
     fprintf(['-------Artifact Channel ' num2str(chan) ' -------- \n'])
     
     templateArray = templateArrayCell{chan};
+    maxLocation = maxLocAll(chan);
+    
+    if isempty(templateArray)
+        continue
+    end
     
     % extract max amplitude for a given channel
-    maxAmpsChan = max(maxAmps(chan,:));
+    maxAmpsChan = max(maxAmps(chan));
     
     % shorten data to be centered around the peak +/- the bracketRange. In
     % this way there is less clustering around non-discriminative data
@@ -222,6 +226,7 @@ for chan = goodVec
         templateArrayExtracted = mean(templateArray)';
     end
     
+    plotIt = 0;
     %   if plotIt
     if plotIt && chan == chanInt
         %%
@@ -337,45 +342,47 @@ fprintf(['-------Finished clustering artifacts-------- \n'])
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 % now do the template subtraction
-for trial = 1:size(rawSig,3)
+
+processedSig = rawSig;
+for chan = 1:size(templateArrayCell, 2)
     
-    if trial > 1
-        firstLoopTrial = 0;
-    else
-        firstLoopTrial = 1;
-    end
-    
-    for chan = goodVec
-        
-        firstLoopChan = 1;
-        rawSigTemp = rawSig(:,chan,trial);
-        templates = templateArrayCellOutput{chan};
-        
-        % add on the trial one
-        %templates = [templates mean(templateTrial{chan}{trial},2)];
-        templates = templates;
-        % ensure no subtraction of exponential
-        if recoverExp
-            templates = analyFunc.recover_EP(templates,fs,'threshDiffCut',expThreshDiffCut,'threshVoltageCut',expThreshVoltageCut);
+    startLoc = cellfun(@(x) x{chan}, startInds, 'UniformOutput', false);
+    startLoc = [startLoc{:}];
+    endLoc = cellfun(@(x) x{chan}, endInds, 'UniformOutput', false);
+    endLoc = [endLoc{:}];
+
+    for trial = 1:size(templateArrayCell{chan}, 2)
+
+        if trial > 1
+            firstLoopTrial = 0;
+        else
+            firstLoopTrial = 1;
         end
         
-        for sts = 1:length(startInds{trial}{chan})
-            win = startInds{trial}{chan}(sts):endInds{trial}{chan}(sts);
-            extractedSig = rawSigTemp(win);
+        win = startLoc(trial):endLoc(trial);
+        extractedSig = rawSig(win, chan);
+        firstLoopChan = 1;
+        templates = templateArrayCellOutput{chan};
             
-            switch normalize
-                case 'preAverage'
-                    extractedSig = extractedSig - mean(extractedSig(1:amntPreAverage));
-                case 'none'
-                    extractedSig = extractedSig ;
-                case 'firstSamp'
-                    extractedSig = extractedSig - extractedSig(1);
-                case 'mean'
-                    extractedSig = extractedSig - mean(extractedSig);
-            end
+        switch normalize
+            case 'preAverage'
+                extractedSig = extractedSig - mean(extractedSig(1:amntPreAverage));
+            case 'none'
+                extractedSig = extractedSig ;
+            case 'firstSamp'
+                extractedSig = extractedSig - extractedSig(1);
+            case 'mean'
+                extractedSig = extractedSig - mean(extractedSig);
+        end
             
             % find best artifact
-            templatesSts = templates(1:length(extractedSig),:);
+            % align templates to max
+            [~, maxIdxLoc] = max(extractedSig);
+            maxLocation = maxLocAll(chan);
+            post = length(extractedSig) - maxIdxLoc;
+            pre = length(extractedSig) - post - 1;
+            
+            templatesSts = templates((maxLocation - pre):(maxLocation + post),:);
             
             % make sure the bracket range does not exceed the first or last
             % sample of the template array
@@ -464,7 +471,7 @@ for trial = 1:size(rawSig,3)
                 templateSubtract = templateSubtract*scaling;
                 
             end
-            rawSigTemp(win) = rawSigTemp(win) - templateSubtract;
+            processedSig(win, chan) = processedSig(win, chan) - templateSubtract;
             
             if plotIt && chan == chanInt && (sts == 1 || sts == 2 || sts == 10) && firstLoopChan
                 %%
@@ -487,9 +494,7 @@ for trial = 1:size(rawSig,3)
             end
             
             firstLoopChan = 0;
-            
-        end
-        
+                    
         if plotIt && (trial == 10 || trial == 15 || trial == 20) && chan == chanInt
             %%
             figure
@@ -557,7 +562,6 @@ for trial = 1:size(rawSig,3)
             
         end
         
-        processedSig(:,chan,trial) = rawSigTemp;
         fprintf(['-------Template Processed - Channel ' num2str(chan) '--' 'Trial ' num2str(trial) '-----\n'])
     end
 end

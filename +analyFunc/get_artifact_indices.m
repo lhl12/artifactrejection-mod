@@ -28,9 +28,9 @@ function [startInds,endInds] = get_artifact_indices(rawSig,varargin)
 %              interpolation scheme on. Does not apply to the linear case
 %          fs - sampling rate (Hz)
 %      plotIt - plot intermediate steps if true
-%     goodVec - vector (e.g. [1 2 4 10]) of the channel indices to use. If
-%              there are bad channels or stimulation channels for instance,
-%              they should be excluded from goodVec
+%    goodCell - trials x 1 cell array of good channels for each trial
+%  stimRecord - vector of length trials with stimulation onset sample
+%               recorded by the TDT for that trial
 %onsetThreshold - This value is used as absolute valued z-score threshold
 %               to determine the onset of artifacts within a train. The differentiated
 %               smoothed signal is used to determine artifact onset. This is also used in
@@ -77,8 +77,7 @@ function [startInds,endInds] = get_artifact_indices(rawSig,varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 p = inputParser;
 
-validData = @(x) isnumeric(x);
-addRequired(p,'rawSig',validData);
+addRequired(p,'rawSig', @isnumeric);
 
 addParameter(p,'useFixedEnd',0,@(x) x==0 || x ==1);
 addParameter(p,'fixedDistance',2,@isnumeric);
@@ -87,9 +86,10 @@ addParameter(p,'pre',0.4096,@isnumeric);
 addParameter(p,'plotIt',0,@(x) x==0 || x ==1);
 addParameter(p,'post',0.4096,@isnumeric);
 addParameter(p,'fs',12207,@isnumeric);
-addParameter(p,'goodVec',[1:64],@isnumeric);
+addParameter(p,'goodCell',{},@iscell);
 addParameter(p,'chanInt',1,@isnumeric);
 addParameter(p,'minDuration',0,@isnumeric);
+addParameter(p, 'stimRecord', [], @isnumeric);
 
 addParameter(p,'onsetThreshold',1.5,@isnumeric);
 
@@ -105,12 +105,19 @@ pre = p.Results.pre;
 post = p.Results.post;
 fixedDistance = p.Results.fixedDistance;
 fs = p.Results.fs;
-goodVec = p.Results.goodVec;
+goodCell = p.Results.goodCell;
 chanInt = p.Results.chanInt;
 minDuration = p.Results.minDuration;
+stimRecord = p.Results.stimRecord;
 threshVoltageCut = p.Results.threshVoltageCut;
 threshDiffCut = p.Results.threshDiffCut;
 onsetThreshold = p.Results.onsetThreshold;
+
+% if goodCell is not provided, all channels are labeled as good for all
+% trials
+if isempty(goodCell)
+    goodCell = repmat({1:size(rawSig, 2)}, size(stimRecord, 1), 1);
+end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 presamps = round(pre/1e3 * fs); % pre time in sec
@@ -119,62 +126,74 @@ minDuration = round(minDuration/1e3 * fs);
 fixedDistanceSamps = round(fixedDistance/1e3 * fs);
 defaultWinAverage = fixedDistanceSamps ;
 
+% choose how far before and after the stim onset time to search for
+% artifacts - ensuring that there will never be multiple onset times in a
+% given window
+n = 2; div = true;
+while div
+    fprintf('Window: 1/%d median stim interval\n', n);
+    stimInterval = round(median(diff(stimRecord))/n);
+    div = stimInterval > min(diff(stimRecord));
+    n = n + 1;
+end
+
 % take diff of signal to find onset of stimulation train
 order = 3;
 framelen = 7;
-fprintf(['-------Smoothing data with Savitsky-Golay Filter-------- \n'])
+fprintf('-------Smoothing data with Savitsky-Golay Filter-------- \n')
 
 rawSigFilt = rawSig;
-
-for ind2 = 1:size(rawSigFilt,2)
-    for ind3 = 1:size(rawSigFilt,3)
-        rawSigFilt(:,ind2,ind3) = savitskyGolay.sgolayfilt_complete(squeeze(rawSig(:,ind2,ind3)),order,framelen);
-        
-    end
+for ind = 1:size(rawSigFilt,2)
+	rawSigFilt(:,ind) = savitskyGolay.sgolayfilt_complete(rawSig(:,ind),order,framelen);
 end
 
-diffSig = permute(cat(3,zeros(size(rawSig,2), size(rawSig,3)),permute(diff(rawSigFilt),[2 3 1])),[3 1 2]);
+diffSig = diff(rawSigFilt);
+diffSig = [diffSig(1, :); diffSig]; % equalize length by repeating first row
+zSig = abs(zscore(diffSig)); % zscore the whole time series together (not trial-wise)
 
 fprintf(['-------Done smoothing and differentiating-------- \n'])
 
-
-% find channel that has the max signal, and use this for subsequent
-% analysis
-[~,chanMax] = (max(max(diffSig(:,goodVec,:))));
-chanMax = chanMax(1);
-chanMax = goodVec(chanMax);
-lengthMax_vec = []; % length vector to build up the dictionary of templates later
 fprintf(['-------Getting artifact indices-------- \n'])
-
-if ~exist('chanInt','var')
-    chanInt = chanMax;
-end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-pctl = @(v,p) interp1(linspace(0.5/length(v), 1-0.5/length(v), length(v))', sort(v), p*0.01, 'spline');
+pctl = @(v,p) interp1(linspace(0.5/length(v), 1-0.5/length(v), length(v))', ...
+    sort(v), p*0.01, 'spline');
 
-timeSampsExtend = 2*fs/1000;% time_ms
+startInds = cell(1, size(stimRecord, 1));
+endInds = cell(1, size(stimRecord, 1));
 
-for trial = 1:size(rawSig,3)
+for trial = 1:size(stimRecord, 1)
     
-    inds = find(abs(zscore(diffSig(:,chanMax,trial)))>onsetThreshold); 
-    diffBtInds = [diff(inds)'];
+    win = (stimRecord(trial) - stimInterval):(stimRecord(trial) + stimInterval); % samples
+    
+    locZSig = zSig(win, goodCell{trial}); % abs zscore differentiated signal
+    [~, chanMax] = max(max(locZSig)); % find the good channel with the highest value for computations later
+    
+    % find indices where zscore crosses threshold
+    inds = find(locZSig(:, chanMax) > onsetThreshold);
+        
+    diffBtInds = diff(inds)';
     [~,indsOnset] = find(abs(zscore(diffBtInds))>onsetThreshold);
     
-    for chan = goodVec
+    startInds{trial} = cell(1, size(rawSig, 2));
+    endInds{trial} = cell(1, size(rawSig, 2));
+    
+    for chan = goodCell{trial}
         
-        startInds{trial}{chan} = [inds(1)-presamps; inds(indsOnset+1)-presamps]';
+        % adjust indices to be for full time series
+        startInds{trial}{chan} = [inds(1)-presamps; inds(indsOnset+1)-presamps]' + win(1) - 1;
         
         if useFixedEnd
             endInds{trial}{chan} = startInds{trial}{chan}+fixedDistanceSamps;
         else
             
             for idx = 1:length(startInds{trial}{chan})
+
                 
-                win = startInds{trial}{chan}(idx):startInds{trial}{chan}(idx)+defaultWinAverage; % get window that you know has the end of the stim pulse
-                signal = rawSigFilt(win,chan,trial);
-                diffSignal = diffSig(win,chan,trial);
+                win_idx = startInds{trial}{chan}(idx):startInds{trial}{chan}(idx)+defaultWinAverage; % get window that you know has the end of the stim pulse
+                signal = rawSigFilt(win_idx, chan);
+                diffSignal = diffSig(win_idx, chan);
           
                 absZSig = abs(zscore(signal));
                 absZDiffSig = abs(zscore(diffSignal));

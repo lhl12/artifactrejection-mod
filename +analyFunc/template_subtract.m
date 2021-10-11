@@ -22,39 +22,40 @@ addRequired(p,'rawSig',validData);
 addParameter(p,'plotIt',0,@(x) x==0 || x ==1);
 addParameter(p,'useFixedEnd',0,@(x) x==0 || x ==1);
 
-addParameter(p,'type','average',@isstr);
+addParameter(p,'type','dictionary',@isstr);
 addParameter(p,'distanceMetricDbscan','eucl',@isstr);
 addParameter(p,'distanceMetricSigMatch','eucl',@isstr);
 
 addParameter(p,'pre',0.4096,@isnumeric);
 addParameter(p,'post',0.4096,@isnumeric);
-addParameter(p,'preInterp',0.2,@isnumeric);
-addParameter(p,'postInterp',0.2,@isnumeric);
+% addParameter(p,'preInterp',0.2,@isnumeric);
+% addParameter(p,'postInterp',0.2,@isnumeric);
 addParameter(p,'stimChans',[],@isnumeric);
-addParameter(p,'bads',[],@isnumeric);
-addParameter(p,'fixedDistance',2,@isnumeric);
+addParameter(p,'bads',[],@isnumeric); % trials x channels
+addParameter(p,'fixedDistance',4,@isnumeric);
 addParameter(p,'fs',12207,@isnumeric);
-addParameter(p,'amntPreAverage',5,@isnumeric);
-addParameter(p,'normalize','firstSamp',@isstr);
+addParameter(p,'amntPreAverage',3,@isnumeric);
+addParameter(p,'normalize','preAverage',@isstr);
 addParameter(p,'recoverExp',0,@(x) x==0 || x ==1);
-addParameter(p,'minDuration',0,@isnumeric);
-addParameter(p,'bracketRange',[-8:8],@isnumeric);
-addParameter(p,'onsetThreshold',1.5,@isnumeric);
+addParameter(p,'minDuration',0.25,@isnumeric);
+addParameter(p,'bracketRange',-6:6,@isnumeric);
+addParameter(p,'onsetThreshold',5,@isnumeric);
 
-addParameter(p,'threshVoltageCut',75,@isnumeric);
-addParameter(p,'threshDiffCut',75,@isnumeric);
+addParameter(p,'threshVoltageCut',99.5,@isnumeric);
+addParameter(p,'threshDiffCut',99.5,@isnumeric);
 
 addParameter(p,'expThreshVoltageCut',75,@isnumeric);
 addParameter(p,'expThreshDiffCut',75,@isnumeric);
 
 addParameter(p,'chanInt',1,@isnumeric);
 
-
 addParameter(p,'minPts',2,@isnumeric);
-addParameter(p,'minClustSize',3,@isnumeric);
+addParameter(p,'minClustSize',1,@isnumeric);
 addParameter(p,'outlierThresh',0.95,@isnumeric);
 
 addParameter(p,'useProcrustes',0,@(x) x==0 || x ==1);
+
+addParameter(p, 'stimRecord', [], @isnumeric);
 
 p.parse(rawSig,varargin{:});
 
@@ -68,8 +69,8 @@ distanceMetricSigMatch = p.Results.distanceMetricSigMatch;
 
 pre = p.Results.pre;
 post = p.Results.post;
-preInterp = p.Results.preInterp;
-postInterp = p.Results.postInterp;
+% preInterp = p.Results.preInterp;
+% postInterp = p.Results.postInterp;
 stimChans = p.Results.stimChans;
 bads = p.Results.bads;
 fixedDistance = p.Results.fixedDistance;
@@ -97,6 +98,8 @@ minClustSize = p.Results.minClustSize;
 outlierThresh = p.Results.outlierThresh;
 
 useProcrustes = p.Results.useProcrustes;
+
+stimRecord = p.Results.stimRecord;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % define matrix of zeros
@@ -104,44 +107,51 @@ processedSig = zeros(size(rawSig));
 
 % make a vector of the good channels to process
 numChans = size(rawSig,2);
-[goods,goodVec] = helpFunc.good_channel_extract('numChans',numChans,'bads',bads,'stimChans',stimChans);
+[~,goodCell] = helpFunc.good_channel_extract('numChans',numChans,'bads',bads,'stimChans',stimChans);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% get beginnings and ends of artifacts
 
 [startInds,endInds] = analyFunc.get_artifact_indices(rawSig,'pre',pre,'post',post,'plotIt',...,
-    plotIt,'useFixedEnd',useFixedEnd,'fixedDistance',fixedDistance,'fs',fs,'goodVec',goodVec,...
-    'minDuration',minDuration,'threshVoltageCut',threshVoltageCut,'threshDiffCut',threshDiffCut,'onsetThreshold',onsetThreshold);
+    plotIt,'useFixedEnd',useFixedEnd,'fixedDistance',fixedDistance,'fs',fs,'goodCell',goodCell,...
+    'minDuration',minDuration,'threshVoltageCut',threshVoltageCut,'threshDiffCut',threshDiffCut,...
+    'onsetThreshold',onsetThreshold, 'stimRecord', stimRecord);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% extract artifacts
 
-[templateCell,lengthMax,maxAmps,maxLocation] = analyFunc.get_artifacts(rawSig,'goodVec',goodVec,...,
-    'startInds',startInds,'endInds',endInds,'plotIt',plotIt,'normalize',normalize,'amntPreAverage',amntPreAverage);
+[templateCell,lengthMax,maxAmps,maxLocation] = analyFunc.get_artifacts(rawSig,'goodCell',goodCell,...,
+    'startInds',startInds,'endInds',endInds,'plotIt',plotIt,'normalize',normalize,...
+    'amntPreAverage',amntPreAverage);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% get templates all same length
 
-[templateTrial,templateArrayCell] = analyFunc.template_equalize_length(templateCell,rawSig,'lengthMax',...,
-    lengthMax,'startInds',startInds,'goodVec',goodVec);
+[~,templateArrayCell, maxIdxArray] = ...
+    analyFunc.template_equalize_length(templateCell,rawSig,'lengthMax',...,
+    lengthMax,'startInds',startInds,'goodCell',goodCell);
+
+[templateArrayCell, maxLocation] = analyFunc.template_align(templateArrayCell, ...
+    maxIdxArray);
 
 %% build up dictionary
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 switch type
     case 'dictionary'
-        [processedSig,templateArrayCellOutput] = analyFunc.template_dictionary(templateArrayCell,templateTrial,rawSig,fs,'plotIt',plotIt,...
+        [processedSig,templateArrayCellOutput] = analyFunc.template_dictionary(templateArrayCell,rawSig,fs,'plotIt',plotIt,...
             'distanceMetricDbscan',distanceMetricDbscan,'distanceMetricSigMatch',distanceMetricSigMatch,...
-            'goodVec',goodVec,'startInds',startInds,'endInds',endInds,'recoverExp',recoverExp,'maxAmps',maxAmps,...
+            'goodCell',goodCell,'startInds',startInds,'endInds',endInds,'recoverExp',recoverExp,'maxAmps',maxAmps,...
             'normalize',normalize,'amntPreAverage',amntPreAverage,'maxLocation',maxLocation,'bracketRange',bracketRange,...
-            'expThreshDiffCut',expThreshDiffCut,'expThreshVoltageCut',expThreshVoltageCut,'chanInt',chanInt,'minPts',minPts,'minClustSize',minClustSize,'outlierThresh',outlierThresh,'useProcrustes',useProcrustes);
+            'expThreshDiffCut',expThreshDiffCut,'expThreshVoltageCut',expThreshVoltageCut,'chanInt',chanInt,'minPts',minPts,...
+            'minClustSize',minClustSize,'outlierThresh',outlierThresh,'useProcrustes',useProcrustes);
         
     case 'average'
         [processedSig,templateArrayCellOutput] = analyFunc.template_average(templateArrayCell,rawSig,'plotIt',plotIt...,
-            ,'goodVec',goodVec,'startInds',startInds,'endInds',endInds);
+            ,'goodVec',goodCell,'startInds',startInds,'endInds',endInds);
         
     case 'trial'
         [processedSig,templateArrayCellOutput] = analyFunc.template_trial(templateTrial,rawSig,'plotIt',plotIt...,
-            ,'goodVec',goodVec,'startInds',startInds,'endInds',endInds);
+            ,'goodVec',goodCell,'startInds',startInds,'endInds',endInds);
 end
 
 fprintf(['-------Extracting data-------- \n \n'])

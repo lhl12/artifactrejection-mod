@@ -1,9 +1,11 @@
-function [goods,goodVec] = good_channel_extract(varargin)
+function [goods,goodCell, allGood] = good_channel_extract(varargin)
 % Usage:  [goods,goodVec] = good_channel_extract(varargin)
 %
 % This function will perform an interpolation scheme for artifacts on a
 % trial by trial, channel by channel basis, implementing either a linear
 % interpolation scheme, or a pchip interpolation scheme
+%
+% MOD LHL: accomodate different stim channels for each trial
 % 
 % Arguments:
 %   Required:
@@ -11,14 +13,16 @@ function [goods,goodVec] = good_channel_extract(varargin)
 %        and bad channels
 %
 %   Optional:
-%   bads - samples x channels x trials 
+%   bads - trials x channels
 %
-%         stimChans - channels used for stimulation which should be
+%   stimChans - channels used for stimulation which should be trials x 2
+%
 % Returns:
 %   goods - a logical matrix with 0 being the "bad" channels, and 1 being
 %   good channels (e.g. [1 0 0 1]
-%   goodVec - vector of the channel indices that are good (e.g. [4 10 15
-%   20])
+%   goodCell - trials x 1 cell array with good channels for each trial  in
+%   each cell
+%   allGood - vector of channels that are never bad or used for stimulation
 %
 %
 %
@@ -39,7 +43,7 @@ function [goods,goodVec] = good_channel_extract(varargin)
 p = inputParser;
 
 addParameter(p,'numChans',64,@isnumeric);
-addParameter(p,'bads',[],@isnumeric);
+addParameter(p,'bads',[],@(x) isnumeric(x) || islogical(x));
 addParameter(p,'stimChans',[],@isnumeric);
 p.parse(varargin{:});
 
@@ -47,19 +51,34 @@ bads = p.Results.bads;
 stimChans = p.Results.stimChans;
 numChans = p.Results.numChans;
 
-badTotal = [stimChans; bads];
+if isempty(bads)
+    
+elseif size(stimChans, 1) ~= size(bads, 1)
+    error('stimChans should be trials x 2 (annode cathode), bads should be a logical array of trials x channels or a cell array of trials x 1');
+end
+
+numTrials = size(stimChans, 1);
 
 % make logical good channels matrix to index
-goods = zeros(numChans,1);
-channelsOfInt = 1:numChans;
-goods(channelsOfInt) = 1;
+goods = true(numTrials, numChans);
+goodCell = cell(numTrials, 1);
 
 % set the goods matrix to be zero where bad channels are
-goods(badTotal) = 0;
+for trl = 1:numTrials
+    goods(trl, stimChans(trl, :)) = false;
+    if isempty(bads)
 
-% make it logical
-goods = logical(goods);
-[~,goodVec] = find(goods'>0);
+    elseif iscell(bads)
+        goods(trl, bads{trl}) = false;
+    elseif islogical(bads)
+        goods(trl, bads(trl, :)) = false;
+    else
+        warning('Unrecognized data type for bads (must be a logical array of trials x channels or a cell array of trials x 1');
+    end
+    goodCell{trl} = find(goods(trl, :));
+end
+
+allGood = find(all(goods, 1))';
 
 end
 
