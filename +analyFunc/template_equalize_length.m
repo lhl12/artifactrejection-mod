@@ -39,7 +39,7 @@ for chan = 1:size(rawSig, 2)
             end
         template{chan}{trial} = artifactsMat;
         % find the index of the overall maximum
-        [~, maxIdx{chan}{trial}] = max(artifactsMat, [], 1);
+        [~, maxIdx{chan}{trial}] = max(abs(artifactsMat), [], 1);
 
     end
     

@@ -223,12 +223,12 @@ for chan = 1:size(rawSig, 2)
         % if no good clusters, try just
     else
         warning('Using average of pulses for channel because no points not labelled as outliers')
-        templateArrayExtracted = mean(templateArray)';
+        templateArrayExtracted = mean(templateArray, 2);
     end
     
     plotIt = 0;
     %   if plotIt
-    if plotIt && chan == chanInt
+    if plotIt %&& chan == chanInt
         %%
         colorFirst = [117 112 179;
             231 41 138;
@@ -377,12 +377,21 @@ for chan = 1:size(templateArrayCell, 2)
             
             % find best artifact
             % align templates to max
-            [~, maxIdxLoc] = max(extractedSig);
+            [~, maxIdxLoc] = max(abs(extractedSig));
             maxLocation = maxLocAll(chan);
-            post = length(extractedSig) - maxIdxLoc;
-            pre = length(extractedSig) - post - 1;
             
-            templatesSts = templates((maxLocation - pre):(maxLocation + post),:);
+            if maxLocation < maxIdxLoc
+                % should only happen when alignment is not chosen
+                post = length(extractedSig) - maxIdxLoc;
+                pad = zeros(maxIdxLoc - maxLocation, size(templates, 2));
+                
+                templatesSts = [pad; templates(1:(maxLocation + post), :)];
+            else
+                post = length(extractedSig) - maxIdxLoc;
+                pre = length(extractedSig) - post - 1;
+
+                templatesSts = templates((maxLocation - pre):(maxLocation + post),:);
+            end
             
             % make sure the bracket range does not exceed the first or last
             % sample of the template array
@@ -415,6 +424,8 @@ for chan = 1:size(templateArrayCell, 2)
             templatesStsShortened = templatesSts(maxLocation+bracketRange,:);
             extractedSigShortened = extractedSig(maxLocation+bracketRange,:);
             
+            shiftBy = 0;
+            
             switch distanceMetricSigMatch
                 case 'corr'
                     % correlation
@@ -437,14 +448,32 @@ for chan = 1:size(templateArrayCell, 2)
                     % dynamic time warping
                     sizeTemplates = size(templatesStsShortened,2);
                     dtwMat = zeros(1,sizeTemplates);
-                    for index = 1:sizeTemplates
-                        dtwMat(index) = dtw(templatesStsShortened(:,index),extractedSigShortened);
+                    for idx = 1:sizeTemplates
+                        dtwMat(idx) = dtw(templatesStsShortened(:,idx),extractedSigShortened);
                     end
                     [~,index] = min(dtwMat);
+                    
+                case 'xcorr' % find maximal cross correlation and realign template as necesarry
+                    sizeTemplates = size(templatesStsShortened,2);
+                    xcorrMat = zeros(1, sizeTemplates);
+                    xcorrIdxMat = zeros(1, sizeTemplates);
+                    for idx = 1:sizeTemplates
+                        locX = xcorr(extractedSigShortened, templatesStsShortened(:, idx), 'coeff');
+                        [xcorrMat(idx), xcorrIdxMat(idx)] = max(abs(locX));
+                    end
+                    [~, index] = max(xcorrMat);
+                    shiftBy = xcorrIdxMat(index) - ceil(length(locX)/2);
             end
             
-            templateSubtract = templatesSts(:,index);
             templateSubtractShort = templatesStsShortened(:,index);
+            % shift template if needed to match maximal cross correlation
+            if shiftBy < 0
+                templateSubtract = [templatesSts((1 - shiftBy):end,index); zeros(-shiftBy, 1)]; 
+            elseif shiftBy > 0
+                templateSubtract = [zeros(shiftBy, 1); templatesSts(1:(end-shiftBy),index)];
+            else
+            	templateSubtract = templatesSts(:,index);
+            end
             % which template best matched
             if firstLoopChan && firstLoopTrial
                 templateSubtractCell{chan} = index;
@@ -462,6 +491,19 @@ for chan = 1:size(templateArrayCell, 2)
             
             %  scaling = templateSubtract\extractedSig;
             %templateSubtract = templateSubtract*scaling;
+%             
+%             % get maximum locations for template and signal
+%             [~, max_ext] = max(extractedSig);
+%             [~, max_temp] = max(templateSubtract);
+%             % signal will always have length <= length of template
+%             % max_temp will always be >= max_ext
+%             % cut off template at start and end to align maxima
+%             if max_ext == max_temp
+%                 templateSubtract = templateSubtract(1:length(extractedSig));
+%             else
+%                 templateSubtract(1:(max_temp - max_ext)) = [];
+%                 templateSubtract = templateSubtract(1:length(extractedSig));
+%             end
             
             if useProcrustes
                 [d,templateSubtract] = procrustes(extractedSig,templateSubtract);
@@ -473,6 +515,7 @@ for chan = 1:size(templateArrayCell, 2)
             end
             processedSig(win, chan) = processedSig(win, chan) - templateSubtract;
             
+            plotIt = 0;
             if plotIt && chan == chanInt && (sts == 1 || sts == 2 || sts == 10) && firstLoopChan
                 %%
                 figure

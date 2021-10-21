@@ -1,4 +1,4 @@
-function [processedSig,templateArrayCellOutput,templateTrial,startInds,endInds] = template_subtract(rawSig,varargin)
+function [processedSig,templateArrayCellOutput,startInds,endInds,params] = template_subtract(rawSig,varargin)
 %USAGE:
 % This function will perform a template subtraction scheme for artifacts on
 % a trial by trial, channel by channel basis. This function will build up
@@ -24,7 +24,7 @@ addParameter(p,'useFixedEnd',0,@(x) x==0 || x ==1);
 
 addParameter(p,'type','dictionary',@isstr);
 addParameter(p,'distanceMetricDbscan','eucl',@isstr);
-addParameter(p,'distanceMetricSigMatch','eucl',@isstr);
+addParameter(p,'distanceMetricSigMatch','xcorr',@isstr);
 
 addParameter(p,'pre',0.4096,@isnumeric);
 addParameter(p,'post',0.4096,@isnumeric);
@@ -56,6 +56,9 @@ addParameter(p,'outlierThresh',0.95,@isnumeric);
 addParameter(p,'useProcrustes',0,@(x) x==0 || x ==1);
 
 addParameter(p, 'stimRecord', [], @isnumeric);
+
+addParameter(p, 'alignmentSimilarity', 0.9, @isnumeric);
+addParameter(p, 'doNotRealignXcorr', false, @islogical);
 
 p.parse(rawSig,varargin{:});
 
@@ -100,6 +103,11 @@ outlierThresh = p.Results.outlierThresh;
 useProcrustes = p.Results.useProcrustes;
 
 stimRecord = p.Results.stimRecord;
+
+alignmentSimilarity = p.Results.alignmentSimilarity;
+doNotRealign = p.Results.doNotRealignXcorr;
+
+params = p.Results;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % define matrix of zeros
@@ -131,8 +139,16 @@ numChans = size(rawSig,2);
     analyFunc.template_equalize_length(templateCell,rawSig,'lengthMax',...,
     lengthMax,'startInds',startInds,'goodCell',goodCell);
 
-[templateArrayCell, maxLocation] = analyFunc.template_align(templateArrayCell, ...
-    maxIdxArray);
+if doNotRealign
+    maxLocation = zeros(size(templateArrayCell));
+    for ii = 1:length(templateArrayCell)
+        [~, idx] = max(templateArrayCell{ii});
+        maxLocation(ii) = median(idx);
+    end
+else
+    [templateArrayCell, maxLocation] = analyFunc.template_align(templateArrayCell, ...
+        maxIdxArray, alignmentSimilarity);
+end
 
 %% build up dictionary
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
