@@ -29,6 +29,8 @@ function [templateArrayCell, maxLocation] = template_align(templateArrayCell, ma
         end
         maxLocation(chan) = newCtr;
     end
+    
+    fprintf(['-------Finished making artifacts the same length-------- \n'])
 
 end
 

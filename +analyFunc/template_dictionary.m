@@ -226,7 +226,11 @@ for chan = 1:size(rawSig, 2)
         templateArrayExtracted = mean(templateArray, 2);
     end
     
-    plotIt = 0;
+    if chan == 1
+        plotIt = false;
+    else
+        plotIt = false;
+    end
     %   if plotIt
     if plotIt %&& chan == chanInt
         %%

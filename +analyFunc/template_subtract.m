@@ -41,8 +41,10 @@ addParameter(p,'minDuration',0.25,@isnumeric);
 addParameter(p,'bracketRange',-6:6,@isnumeric);
 addParameter(p,'onsetThreshold',5,@isnumeric);
 
-addParameter(p,'threshVoltageCut',99.5,@isnumeric);
-addParameter(p,'threshDiffCut',99.5,@isnumeric);
+% addParameter(p,'threshVoltageCut',99.5,@isnumeric);
+% addParameter(p,'threshDiffCut',99.5,@isnumeric);
+addParameter(p,'threshVoltageCut',80,@isnumeric);
+addParameter(p,'threshDiffCut',80,@isnumeric);
 
 addParameter(p,'expThreshVoltageCut',75,@isnumeric);
 addParameter(p,'expThreshDiffCut',75,@isnumeric);
@@ -53,7 +55,7 @@ addParameter(p,'minPts',2,@isnumeric);
 addParameter(p,'minClustSize',1,@isnumeric);
 addParameter(p,'outlierThresh',0.95,@isnumeric);
 
-addParameter(p,'useProcrustes',0,@(x) x==0 || x ==1);
+addParameter(p,'useProcrustes',1,@(x) x==0 || x ==1);
 
 addParameter(p, 'stimRecord', [], @isnumeric);
 

@@ -58,12 +58,18 @@ for trial = 1:nTrials % loop through trials
                         
         end
         
-        lengthMaxChan(chan) = max(locMax);
-        templateCell{chan}{trial} = avgSignal;
-        
-        [maxLoc, idxLoc] = cellfun(@max, avgSignal);
-        maxLocationTrials(trial, chan) = median(idxLoc);
-        maxTrials(trial, chan) = median(maxLoc);
+        if isempty(locMax)
+            lengthMaxChan(chan) = 0;
+            maxLocationTrials(trial, chan) = 0;
+            maxTrials(trial, chan) = 0;
+        else
+            lengthMaxChan(chan) = max(locMax);
+            templateCell{chan}{trial} = avgSignal;
+
+            [maxLoc, idxLoc] = cellfun(@max, avgSignal);
+            maxLocationTrials(trial, chan) = median(idxLoc);
+            maxTrials(trial, chan) = median(maxLoc);
+        end
         
         if plotIt && (trial == 10 || trial == 1000)
             figure

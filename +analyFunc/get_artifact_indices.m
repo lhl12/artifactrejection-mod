@@ -181,43 +181,45 @@ for trial = 1:size(stimRecord, 1)
     
     for chan = goodCell{trial}
         
-        % adjust indices to be for full time series
-        startInds{trial}{chan} = [inds(1)-presamps; inds(indsOnset+1)-presamps]' + win(1) - 1;
-        
-        if useFixedEnd
-            endInds{trial}{chan} = startInds{trial}{chan}+fixedDistanceSamps;
-        else
-            
-            for idx = 1:length(startInds{trial}{chan})
+        if ~isempty(inds)
+            % adjust indices to be for full time series
+            startInds{trial}{chan} = [inds(1)-presamps; inds(indsOnset+1)-presamps]' + win(1) - 1;
 
-                
-                win_idx = startInds{trial}{chan}(idx):startInds{trial}{chan}(idx)+defaultWinAverage; % get window that you know has the end of the stim pulse
-                signal = rawSigFilt(win_idx, chan);
-                diffSignal = diffSig(win_idx, chan);
-          
-                absZSig = abs(zscore(signal));
-                absZDiffSig = abs(zscore(diffSignal));
+            if useFixedEnd
+                endInds{trial}{chan} = startInds{trial}{chan}+fixedDistanceSamps;
+            else
 
-                threshSig = pctl(absZSig,threshVoltageCut); 
-                threshDiff = pctl(absZDiffSig,threshDiffCut); 
-                
-                % look past minimum start time
-                last = presamps+minDuration+find(absZSig(presamps+minDuration:end)>threshSig,1,'last'); 
-                last2 = presamps+minDuration+find(absZDiffSig(presamps+minDuration:end)>threshDiff,1,'last')+1; 
-                ct = max(last, last2);
-                
-                if isempty(ct)
-                    ct = last;
-                    if isempty(last)
-                        ct = last2;
-                        if isempty(last2)
-                            ct = postsamps;
+                for idx = 1:length(startInds{trial}{chan})
+
+
+                    win_idx = startInds{trial}{chan}(idx):startInds{trial}{chan}(idx)+defaultWinAverage; % get window that you know has the end of the stim pulse
+                    signal = rawSigFilt(win_idx, chan);
+                    diffSignal = diffSig(win_idx, chan);
+
+                    absZSig = abs(zscore(signal));
+                    absZDiffSig = abs(zscore(diffSignal));
+
+                    threshSig = pctl(absZSig,threshVoltageCut); 
+                    threshDiff = pctl(absZDiffSig,threshDiffCut); 
+
+                    % look past minimum start time
+                    last = presamps+minDuration+find(absZSig(presamps+minDuration:end)>threshSig,1,'last'); 
+                    last2 = presamps+minDuration+find(absZDiffSig(presamps+minDuration:end)>threshDiff,1,'last')+1; 
+                    ct = max(last, last2);
+
+                    if isempty(ct)
+                        ct = last;
+                        if isempty(last)
+                            ct = last2;
+                            if isempty(last2)
+                                ct = postsamps;
+                            end
                         end
                     end
+
+                    endInds{trial}{chan}(idx) = ct + startInds{trial}{chan}(idx) + postsamps;
+
                 end
-                
-                endInds{trial}{chan}(idx) = ct + startInds{trial}{chan}(idx) + postsamps;
-                
             end
         end
         
