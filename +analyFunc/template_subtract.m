@@ -1,4 +1,5 @@
-function [processedSig,templateArrayCellOutput,startInds,endInds,params] = template_subtract(rawSig,varargin)
+function [processedSig,templateArrayCellOutput,startInds,endInds,params,chck] = ...
+    template_subtract(rawSig,varargin)
 %USAGE:
 % This function will perform a template subtraction scheme for artifacts on
 % a trial by trial, channel by channel basis. This function will build up
@@ -62,6 +63,8 @@ addParameter(p, 'stimRecord', [], @isnumeric);
 addParameter(p, 'alignmentSimilarity', 0.9, @isnumeric);
 addParameter(p, 'doNotRealignXcorr', false, @islogical);
 
+addParameter(p, 'fixInterval', false, @islogical);
+
 p.parse(rawSig,varargin{:});
 
 rawSig = p.Results.rawSig;
@@ -109,6 +112,8 @@ stimRecord = p.Results.stimRecord;
 alignmentSimilarity = p.Results.alignmentSimilarity;
 doNotRealign = p.Results.doNotRealignXcorr;
 
+fixInterval = p.Results.fixInterval;
+
 params = p.Results;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -125,7 +130,7 @@ numChans = size(rawSig,2);
 [startInds,endInds] = analyFunc.get_artifact_indices(rawSig,'pre',pre,'post',post,'plotIt',...,
     plotIt,'useFixedEnd',useFixedEnd,'fixedDistance',fixedDistance,'fs',fs,'goodCell',goodCell,...
     'minDuration',minDuration,'threshVoltageCut',threshVoltageCut,'threshDiffCut',threshDiffCut,...
-    'onsetThreshold',onsetThreshold, 'stimRecord', stimRecord);
+    'onsetThreshold',onsetThreshold, 'stimRecord', stimRecord, 'fixInterval', fixInterval);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% extract artifacts
@@ -173,5 +178,9 @@ switch type
 end
 
 fprintf(['-------Extracting data-------- \n \n'])
+
+%%
+fprintf(['-------Checking removal quality-------- \n \n'])
+chck = analyFunc.assess_removal(processedSig, startInds, endInds);
 
 end

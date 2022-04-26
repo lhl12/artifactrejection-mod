@@ -27,7 +27,7 @@ function [] = checkAllTrials(data, artrem, annode, cathode, onsets_samps, fsData
             chansUse = 1:size(data, 2);
             chansUse(chansUse == annode(trialNum) | chansUse == cathode(trialNum)) = [];
             
-            plot(tEpoch, artrem(starts(ss):stops(ss), chansUse));
+            plot(tEpoch, artrem(starts(ss):stops(ss), chansUse) - artrem(starts(ss), chansUse));
             
             title(sprintf('Trial %d', trialNum));
             

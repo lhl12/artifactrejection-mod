@@ -153,7 +153,7 @@ maxLocAll = maxLocation;
 
 fprintf(['-------Dictionary-------- \n'])
 
-plotIt = 1;
+plotIt = 0;
 
 for chan = 1:size(rawSig, 2)
     fprintf(['-------Artifact Channel ' num2str(chan) ' -------- \n'])
@@ -507,7 +507,7 @@ for chan = 1:size(templateArrayCell, 2)
 %             else
 %                 templateSubtract(1:(max_temp - max_ext)) = [];
 %                 templateSubtract = templateSubtract(1:length(extractedSig));
-%             end
+%             endx
             
             if useProcrustes
                 [d,templateSubtract] = procrustes(extractedSig,templateSubtract);
@@ -517,7 +517,12 @@ for chan = 1:size(templateArrayCell, 2)
                 templateSubtract = templateSubtract*scaling;
                 
             end
-            processedSig(win, chan) = processedSig(win, chan) - templateSubtract;
+            
+            yshift = processedSig(win(1), chan) - templateSubtract(1);
+            
+            templateSubtract = templateSubtract + yshift;
+            
+            processedSig(win, chan) = processedSig(win, chan) - templateSubtract + processedSig(win(1), chan);
             
             plotIt = 0;
             if plotIt && chan == chanInt && (sts == 1 || sts == 2 || sts == 10) && firstLoopChan

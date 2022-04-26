@@ -96,6 +96,8 @@ addParameter(p,'onsetThreshold',1.5,@isnumeric);
 addParameter(p,'threshVoltageCut',75,@isnumeric);
 addParameter(p,'threshDiffCut',75,@isnumeric);
 
+addParameter(p, 'fixInterval', false, @islogical);
+
 p.parse(rawSig,varargin{:});
 
 rawSig = p.Results.rawSig;
@@ -112,6 +114,7 @@ stimRecord = p.Results.stimRecord;
 threshVoltageCut = p.Results.threshVoltageCut;
 threshDiffCut = p.Results.threshDiffCut;
 onsetThreshold = p.Results.onsetThreshold;
+fixInterval = p.Results.fixInterval;
 
 % if goodCell is not provided, all channels are labeled as good for all
 % trials
@@ -129,12 +132,16 @@ defaultWinAverage = fixedDistanceSamps ;
 % choose how far before and after the stim onset time to search for
 % artifacts - ensuring that there will never be multiple onset times in a
 % given window
-n = 2; div = true;
-while div
-    fprintf('Window: 1/%d median stim interval\n', n);
-    stimInterval = round(median(diff(stimRecord))/n);
-    div = stimInterval > min(diff(stimRecord));
-    n = n + 1;
+if fixInterval
+    stimInterval = 500;
+else
+    n = 2; div = true;
+    while div
+        fprintf('Window: 1/%d median stim interval\n', n);
+        stimInterval = round(median(diff(stimRecord))/n);
+        div = stimInterval > min(diff(stimRecord));
+        n = n + 1;
+    end
 end
 
 % take diff of signal to find onset of stimulation train
