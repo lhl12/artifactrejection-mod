@@ -53,7 +53,7 @@ function [datout] = checkAllBr(data, fsData, annode, cathode, onsets_samps, dmdb
             
             title([num2str(br{b1}{b2}(1)) ':' num2str(br{b1}{b2}(end)) ' (' num2str(nansum(chck)) ')']);
             
-            if all(nansum(chck) >= .9*size(chck, 1))
+            if all(nansum(chck) >= .8*size(chck, 1))
 %             if all(nansum(chck) == size(chck, 1))
                 return
             end
