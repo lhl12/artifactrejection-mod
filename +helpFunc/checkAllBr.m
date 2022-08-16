@@ -1,10 +1,27 @@
-function [datout] = checkAllBr(data, fsData, annode, cathode, onsets_samps, dmdb)
+function [datout] = checkAllBr(data, fsData, anode, cathode, onsets_samps, varargin)
 %CHECKALLBR Summary of this function goes here
 %   Detailed explanation goes here
 
-    if ~exist('dmdb', 'var')
-        dmdb = 'eucl';
-    end
+    p = inputParser;
+    addRequired(p, 'data', @isnumeric);
+    addRequired(p, 'fsData', @isnumeric);
+    addRequired(p, 'anode', @isnumeric);
+    addRequired(p, 'cathode', @isnumeric);
+    addRequired(p, 'onsets_samps', @isnumeric);
+    addParameter(p, 'dmdb', 'eucl', @(x) strcmp(x, 'eucl') || strcmp(x, 'corr'));
+    addParameter(p, 'pre', .4096, @isnumeric);
+    addParameter(p, 'post', .4096, @isnumeric);
+    
+    p.parse(data, fsData, anode, cathode, onsets_samps, varargin{:});
+    
+    data = p.Results.data;
+    fsData = p.Results.fsData;
+    anode = p.Results.anode;
+    cathode = p.Results.cathode;
+    onsets_samps = p.Results.onsets_samps;
+    dmdb = p.Results.dmdb;
+    pre = p.Results.pre;
+    post = p.Results.post;
     
     br = {{-6:6 -6:5 -6:4 -6:3 -6:2 -6:1 -1:6 -2:6 -3:6 -4:6 -5:6}, ...
         {-5:5 -5:4 -5:3 -5:2 -5:1 -1:5 -2:5 -3:5 -4:5}, ...
@@ -24,8 +41,9 @@ function [datout] = checkAllBr(data, fsData, annode, cathode, onsets_samps, dmdb
 %             plot(data, 'r');
 %             hold on;
             [da, ~, ~, ~, ~, chck] = analyFunc.template_subtract(data, 'fs', ...
-                fsData, 'stimChans', [annode cathode], 'stimRecord', onsets_samps, ...
-                'bracketRange', br{b1}{b2}, 'distanceMetricDbscan', dmdb);%'threshVoltageCut', 90, 'threshDiffCut', 90, ...
+                fsData, 'stimChans', [anode cathode], 'stimRecord', onsets_samps, ...
+                'bracketRange', br{b1}{b2}, 'distanceMetricDbscan', dmdb, ...
+                'pre', pre, 'post', post);%'threshVoltageCut', 90, 'threshDiffCut', 90, ...
                 %'useProcrustes', 1);%, 'distanceMetricDbscan', 'corr');
 %             di = interpSpikes(da, 99, onsets_samps, 50, [annode cathode]);
             
