@@ -181,7 +181,11 @@ for trial = 1:size(stimRecord, 1)
     inds = find(locZSig(:, chanMax) > onsetThreshold);
         
     diffBtInds = diff(inds)';
-    [~,indsOnset] = find(abs(zscore(diffBtInds))>onsetThreshold);
+%     if ~any(abs(zscore(diffBtInds))) > onsetThreshold
+%         indsOnset = 1;
+%     else
+        [~,indsOnset] = find(abs(zscore(diffBtInds))>onsetThreshold);
+%     end
     
     startInds{trial} = cell(1, size(rawSig, 2));
     endInds{trial} = cell(1, size(rawSig, 2));

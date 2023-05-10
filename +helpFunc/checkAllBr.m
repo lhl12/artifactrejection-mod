@@ -71,6 +71,7 @@ function [datout] = checkAllBr(data, fsData, anode, cathode, onsets_samps, varar
             
             title([num2str(br{b1}{b2}(1)) ':' num2str(br{b1}{b2}(end)) ' (' num2str(nansum(chck)) ')']);
             
+            vline(onsets_samps);
             if all(nansum(chck) >= .8*size(chck, 1))
 %             if all(nansum(chck) == size(chck, 1))
                 return

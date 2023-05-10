@@ -32,7 +32,7 @@ addParameter(p,'post',0.4096,@isnumeric);
 % addParameter(p,'preInterp',0.2,@isnumeric);
 % addParameter(p,'postInterp',0.2,@isnumeric);
 addParameter(p,'stimChans',[],@isnumeric);
-addParameter(p,'bads',[],@isnumeric); % trials x channels
+addParameter(p,'bads',[],@islogical); % trials x channels
 addParameter(p,'fixedDistance',4,@isnumeric);
 addParameter(p,'fs',12207,@isnumeric);
 addParameter(p,'amntPreAverage',3,@isnumeric);

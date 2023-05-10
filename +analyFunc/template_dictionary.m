@@ -408,16 +408,22 @@ for chan = 1:size(templateArrayCell, 2)
             adjustTemplates = false;
             if (bracketRangeMin < 1)
                 bracketRangeMin = 0;
+%                 bracketRangeMin = 1;
                 adjustTemplates = true;
             end
             
+            % changing 8/31?
             if (bracketRangeMax >= sizeTemplates(1))
                 bracketRangeMax = sizeTemplates(1) - maxLocation;
                 adjustTemplates = true;
             end
+%             if (bracketRangeMax > sizeTemplates(1))
+%                 bracketRangeMax = sizeTemplates(1);
+%                 adjustTemplates = true;
+%             end
             
             if adjustTemplates
-                bracketRange = [bracketRangeMin:bracketRangeMax];
+                bracketRange = [bracketRangeMin:bracketRangeMax];% - maxLocation;
             end
             
             if isempty(bracketRange)
@@ -462,6 +468,7 @@ for chan = 1:size(templateArrayCell, 2)
                     xcorrMat = zeros(1, sizeTemplates);
                     xcorrIdxMat = zeros(1, sizeTemplates);
                     for idx = 1:sizeTemplates
+                        
                         locX = xcorr(extractedSigShortened, templatesStsShortened(:, idx), 'coeff');
                         [xcorrMat(idx), xcorrIdxMat(idx)] = max(abs(locX));
                     end
